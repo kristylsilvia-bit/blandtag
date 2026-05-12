@@ -7,7 +7,7 @@ import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import AuthModal from './AuthModal';
 import BuyCreditsModal from './BuyCreditsModal';
-import { Video, LogOut, CreditCard, Loader2, Download, Zap } from 'lucide-react';
+import { Video, LogOut, CreditCard, Loader2, Download, Zap, AlertTriangle } from 'lucide-react';
 
 type AspectRatio = '16:9' | '9:16' | '1:1';
 type GenState = 'idle' | 'consuming' | 'starting' | 'polling' | 'done' | 'error';
@@ -30,6 +30,7 @@ export default function VideoApp() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const unsubCreditsRef = useRef<(() => void) | null>(null);
@@ -58,39 +59,48 @@ export default function VideoApp() {
 
   // Firebase auth state
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      if (!u) {
-        setCredits(null);
-        unsubCreditsRef.current?.();
-        unsubCreditsRef.current = null;
-      }
-    });
-    return unsub;
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = onAuthStateChanged(auth, (u) => {
+        setUser(u);
+        if (!u) {
+          setCredits(null);
+          unsubCreditsRef.current?.();
+          unsubCreditsRef.current = null;
+        }
+      });
+    } catch (e) {
+      setConfigError(
+        'Firebase is not configured. Add NEXT_PUBLIC_FIREBASE_* environment variables in Vercel and redeploy.',
+      );
+    }
+    return () => unsub?.();
   }, []);
 
   // Firestore credits listener (matches visionary-ai schema)
   useEffect(() => {
     if (!user) return;
-
-    const userRef = doc(db, 'users', user.uid);
-    setDoc(
-      userRef,
-      {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        lastLogin: serverTimestamp(),
-      },
-      { merge: true },
-    );
-
-    const unsub = onSnapshot(userRef, (snap) => {
-      setCredits(Number(snap.data()?.credits ?? 0));
-    });
-    unsubCreditsRef.current = unsub;
-    return unsub;
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      setDoc(
+        userRef,
+        {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+          lastLogin: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      const unsub = onSnapshot(userRef, (snap) => {
+        setCredits(Number(snap.data()?.credits ?? 0));
+      });
+      unsubCreditsRef.current = unsub;
+      return unsub;
+    } catch (e) {
+      console.error('Firestore error:', e);
+    }
   }, [user]);
 
   // Cleanup polling on unmount
@@ -106,10 +116,7 @@ export default function VideoApp() {
   }
 
   async function handleGenerate() {
-    if (!user) {
-      setShowAuth(true);
-      return;
-    }
+    if (!user) { setShowAuth(true); return; }
     if (!prompt.trim()) return;
     if (['consuming', 'starting', 'polling'].includes(genState)) return;
 
@@ -118,7 +125,6 @@ export default function VideoApp() {
     if (pollRef.current) clearInterval(pollRef.current);
 
     try {
-      // Step 1: deduct credits atomically
       setGenState('consuming');
       const token = await getToken();
       const creditRes = await fetch('/api/consume-credits', {
@@ -128,7 +134,6 @@ export default function VideoApp() {
       const creditJson = await creditRes.json();
       if (!creditRes.ok) throw new Error(creditJson.error || 'Credit deduction failed');
 
-      // Step 2: start video generation
       setGenState('starting');
       const genRes = await fetch('/api/generate-video', {
         method: 'POST',
@@ -140,7 +145,6 @@ export default function VideoApp() {
 
       const { operationName } = genJson;
 
-      // Step 3: poll for completion (every 8s; Veo takes 1–3 minutes)
       setGenState('polling');
       pollRef.current = setInterval(async () => {
         try {
@@ -193,9 +197,20 @@ export default function VideoApp() {
     return 'Generate Video';
   })();
 
+  if (configError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-2xl p-8 max-w-md text-center flex flex-col items-center gap-4">
+          <AlertTriangle className="w-8 h-8 text-yellow-400" />
+          <h2 className="font-semibold text-lg">Configuration Required</h2>
+          <p className="text-sm text-gray-300">{configError}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Header */}
       <header className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Video className="w-5 h-5 text-violet-400" />
@@ -237,21 +252,18 @@ export default function VideoApp() {
         </div>
       </header>
 
-      {/* Toast */}
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-800 border border-gray-700 rounded-xl px-5 py-2.5 text-sm shadow-2xl">
           {toast}
         </div>
       )}
 
-      {/* Main content */}
       <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-10 flex flex-col gap-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-1">Generate a Video</h1>
           <p className="text-gray-400 text-sm">Powered by Veo 3.1 &middot; 10 credits per video</p>
         </div>
 
-        {/* Prompt */}
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -261,9 +273,7 @@ export default function VideoApp() {
           className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 placeholder-gray-600 disabled:opacity-60"
         />
 
-        {/* Options row */}
         <div className="flex flex-wrap gap-6 items-start">
-          {/* Aspect ratio */}
           <div className="flex flex-col gap-2">
             <label className="text-xs text-gray-500 font-medium uppercase tracking-wider">Aspect Ratio</label>
             <div className="flex gap-2">
@@ -284,29 +294,22 @@ export default function VideoApp() {
             </div>
           </div>
 
-          {/* Duration */}
           <div className="flex flex-col gap-2 flex-1 min-w-[180px]">
             <label className="text-xs text-gray-500 font-medium uppercase tracking-wider">
               Duration: {duration}s
             </label>
             <input
-              type="range"
-              min={5}
-              max={10}
-              step={1}
-              value={duration}
+              type="range" min={5} max={10} step={1} value={duration}
               disabled={isGenerating}
               onChange={(e) => setDuration(Number(e.target.value))}
               className="accent-violet-500 disabled:opacity-50"
             />
             <div className="flex justify-between text-xs text-gray-600">
-              <span>5s</span>
-              <span>10s</span>
+              <span>5s</span><span>10s</span>
             </div>
           </div>
         </div>
 
-        {/* Generate button */}
         <button
           onClick={handleGenerate}
           disabled={isGenerating || !prompt.trim()}
@@ -316,27 +319,19 @@ export default function VideoApp() {
           {genButtonLabel}
         </button>
 
-        {/* Low-credit warning */}
         {user && credits !== null && credits < 10 && !isGenerating && (
           <div className="flex items-center justify-between bg-yellow-900/20 border border-yellow-700/50 rounded-xl px-4 py-3 text-sm">
             <span className="text-yellow-300">Not enough credits to generate a video.</span>
-            <button
-              onClick={() => setShowBuy(true)}
-              className="text-yellow-400 hover:text-yellow-200 font-medium"
-            >
+            <button onClick={() => setShowBuy(true)} className="text-yellow-400 hover:text-yellow-200 font-medium">
               Buy credits
             </button>
           </div>
         )}
 
-        {/* Error */}
         {error && (
-          <div className="bg-red-950/50 border border-red-700/60 rounded-xl p-4 text-sm text-red-300">
-            {error}
-          </div>
+          <div className="bg-red-950/50 border border-red-700/60 rounded-xl p-4 text-sm text-red-300">{error}</div>
         )}
 
-        {/* Polling indicator */}
         {genState === 'polling' && !videoUrl && (
           <div className="flex flex-col items-center gap-3 py-14">
             <Loader2 className="w-10 h-10 animate-spin text-violet-400" />
@@ -345,21 +340,15 @@ export default function VideoApp() {
           </div>
         )}
 
-        {/* Video output */}
         {videoUrl && (
           <div className="flex flex-col gap-3">
             <video
-              key={videoUrl}
-              src={videoUrl}
-              controls
-              autoPlay
-              loop
-              playsInline
+              key={videoUrl} src={videoUrl}
+              controls autoPlay loop playsInline
               className={`rounded-xl bg-gray-900 ${ASPECT_CLASSES[aspectRatio]}`}
             />
             <a
-              href={videoUrl}
-              download="visionary-ai-video.mp4"
+              href={videoUrl} download="visionary-ai-video.mp4"
               className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors w-fit"
             >
               <Download className="w-4 h-4" />
