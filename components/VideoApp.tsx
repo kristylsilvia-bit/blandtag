@@ -28,7 +28,6 @@ export default function VideoApp() {
   const [duration, setDuration] = useState(8);
   const [genState, setGenState] = useState<GenState>('idle');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [videoBase64, setVideoBase64] = useState<{ data: string; mimeType: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -70,12 +69,11 @@ export default function VideoApp() {
     return unsub;
   }, []);
 
-  // Firestore credits listener
+  // Firestore credits listener (matches visionary-ai schema)
   useEffect(() => {
     if (!user) return;
 
     const userRef = doc(db, 'users', user.uid);
-    // Create/update user doc on sign-in (matches visionary-ai schema)
     setDoc(
       userRef,
       {
@@ -117,11 +115,10 @@ export default function VideoApp() {
 
     setError(null);
     setVideoUrl(null);
-    setVideoBase64(null);
     if (pollRef.current) clearInterval(pollRef.current);
 
     try {
-      // Step 1: deduct credits
+      // Step 1: deduct credits atomically
       setGenState('consuming');
       const token = await getToken();
       const creditRes = await fetch('/api/consume-credits', {
@@ -143,7 +140,7 @@ export default function VideoApp() {
 
       const { operationName } = genJson;
 
-      // Step 3: poll for completion
+      // Step 3: poll for completion (every 8s; Veo takes 1–3 minutes)
       setGenState('polling');
       pollRef.current = setInterval(async () => {
         try {
@@ -170,9 +167,9 @@ export default function VideoApp() {
             } else if (statusJson.videoUrl) {
               setVideoUrl(statusJson.videoUrl);
               setGenState('done');
-            } else if (statusJson.videoData) {
-              setVideoBase64({ data: statusJson.videoData, mimeType: statusJson.mimeType || 'video/mp4' });
-              setGenState('done');
+            } else {
+              setGenState('error');
+              setError('Video completed but no URL was returned.');
             }
           }
         } catch {
@@ -188,7 +185,6 @@ export default function VideoApp() {
   }
 
   const isGenerating = ['consuming', 'starting', 'polling'].includes(genState);
-  const videoSrc = videoUrl ?? (videoBase64 ? `data:${videoBase64.mimeType};base64,${videoBase64.data}` : null);
 
   const genButtonLabel = (() => {
     if (genState === 'consuming') return 'Deducting credits…';
@@ -341,22 +337,20 @@ export default function VideoApp() {
         )}
 
         {/* Polling indicator */}
-        {genState === 'polling' && !videoSrc && (
+        {genState === 'polling' && !videoUrl && (
           <div className="flex flex-col items-center gap-3 py-14">
-            <div className="relative">
-              <Loader2 className="w-10 h-10 animate-spin text-violet-400" />
-            </div>
+            <Loader2 className="w-10 h-10 animate-spin text-violet-400" />
             <p className="text-sm text-gray-400">Your video is being generated — this can take 1–3 minutes.</p>
             <p className="text-xs text-gray-600">Checking every 8 seconds…</p>
           </div>
         )}
 
         {/* Video output */}
-        {videoSrc && (
+        {videoUrl && (
           <div className="flex flex-col gap-3">
             <video
-              key={videoSrc}
-              src={videoSrc}
+              key={videoUrl}
+              src={videoUrl}
               controls
               autoPlay
               loop
@@ -364,7 +358,7 @@ export default function VideoApp() {
               className={`rounded-xl bg-gray-900 ${ASPECT_CLASSES[aspectRatio]}`}
             />
             <a
-              href={videoSrc}
+              href={videoUrl}
               download="visionary-ai-video.mp4"
               className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors w-fit"
             >

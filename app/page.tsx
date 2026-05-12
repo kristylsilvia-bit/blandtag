@@ -1,7 +1,5 @@
-import dynamic from 'next/dynamic';
-
-const VideoApp = dynamic(() => import('@/components/VideoApp'), { ssr: false });
+import HomeClient from './HomeClient';
 
 export default function Home() {
-  return <VideoApp />;
+  return <HomeClient />;
 }

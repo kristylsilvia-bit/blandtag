@@ -21,10 +21,11 @@ export async function POST(req: NextRequest) {
     }
 
     const duration = Math.min(Math.max(Number(durationSeconds), 5), 10);
+    const model = process.env.VEO_MODEL || 'veo-3.1-fast-generate-preview';
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
     const operation = await ai.models.generateVideos({
-      model: 'veo-3.0-generate-preview',
+      model,
       prompt: prompt.trim(),
       config: { aspectRatio, durationSeconds: duration },
     });

@@ -4,6 +4,15 @@ import { getAdminAuth } from '@/lib/firebaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+function extractVideo(operation: any) {
+  const response = operation?.response;
+  const generated =
+    response?.generatedVideos?.[0] || response?.generatedSamples?.[0];
+  return generated?.video || generated;
+}
+
 export async function POST(req: NextRequest) {
   if (!process.env.GEMINI_API_KEY) {
     return NextResponse.json({ error: 'Missing GEMINI_API_KEY' }, { status: 500 });
@@ -21,31 +30,28 @@ export async function POST(req: NextRequest) {
     }
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const operation = await (ai.operations as any).get({ name: operationName });
+    const operation = await (ai.operations as any).getVideosOperation({
+      operation: { name: operationName },
+    });
 
     if (!operation.done) {
       return NextResponse.json({ done: false });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sample = (operation as any).response?.generatedSamples?.[0];
-    const video = sample?.video;
-
-    if (!video) {
-      return NextResponse.json({ done: true, error: 'No video in response' });
+    const video = extractVideo(operation);
+    if (!video || (!video.uri && !video.videoBytes)) {
+      return NextResponse.json({
+        done: true,
+        error: 'Video generation completed but no video data was returned.',
+      });
     }
 
-    if (video.uri) {
-      return NextResponse.json({ done: true, videoUrl: video.uri });
-    }
-
-    if (video.videoBytes) {
-      const base64 = Buffer.from(video.videoBytes as Uint8Array).toString('base64');
-      return NextResponse.json({ done: true, videoData: base64, mimeType: 'video/mp4' });
-    }
-
-    return NextResponse.json({ done: true, error: 'No video data in response' });
+    // Client always uses the proxy endpoint — it handles both uri and videoBytes
+    // and keeps the API key server-side.
+    return NextResponse.json({
+      done: true,
+      videoUrl: `/api/video-download?op=${encodeURIComponent(operationName)}`,
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Status check failed' },
