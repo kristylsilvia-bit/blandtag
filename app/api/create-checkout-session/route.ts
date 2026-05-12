@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { adminAuth } from '@/lib/firebaseAdmin';
+import { getAdminAuth } from '@/lib/firebaseAdmin';
+
+export const dynamic = 'force-dynamic';
 
 const CREDIT_PACKS: Record<string, { name: string; credits: number; amount: number; description: string }> = {
   starter: { name: 'Starter Pack', credits: 100, amount: 300, description: '100 credits for $3.00' },
@@ -19,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const decoded = await adminAuth.verifyIdToken(token);
+    const decoded = await getAdminAuth().verifyIdToken(token);
     const { packId } = await req.json();
     const pack = CREDIT_PACKS[packId];
     if (!pack) return NextResponse.json({ error: 'Invalid pack' }, { status: 400 });

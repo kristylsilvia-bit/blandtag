@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
-import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
+import { getAdminAuth, getAdminDb } from '@/lib/firebaseAdmin';
+
+export const dynamic = 'force-dynamic';
 
 const COST_PER_VIDEO = 10;
 
@@ -9,10 +11,11 @@ export async function POST(req: NextRequest) {
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const decoded = await adminAuth.verifyIdToken(token);
-    const userRef = adminDb.collection('users').doc(decoded.uid);
+    const decoded = await getAdminAuth().verifyIdToken(token);
+    const db = getAdminDb();
+    const userRef = db.collection('users').doc(decoded.uid);
 
-    const remaining = await adminDb.runTransaction(async (tx) => {
+    const remaining = await db.runTransaction(async (tx) => {
       const snap = await tx.get(userRef);
       const current = Number(snap.data()?.credits || 0);
 

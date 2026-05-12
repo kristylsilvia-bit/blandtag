@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { FieldValue } from 'firebase-admin/firestore';
-import { adminDb } from '@/lib/firebaseAdmin';
+import { getAdminDb } from '@/lib/firebaseAdmin';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
@@ -25,7 +27,7 @@ export async function POST(req: NextRequest) {
       const credits = Number(session.metadata?.credits || 0);
 
       if (uid && credits > 0) {
-        await adminDb
+        await getAdminDb()
           .collection('users')
           .doc(uid)
           .set(

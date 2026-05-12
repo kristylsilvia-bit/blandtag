@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
-import { adminAuth } from '@/lib/firebaseAdmin';
+import { getAdminAuth } from '@/lib/firebaseAdmin';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   if (!process.env.GEMINI_API_KEY) {
@@ -11,7 +13,7 @@ export async function POST(req: NextRequest) {
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    await adminAuth.verifyIdToken(token);
+    await getAdminAuth().verifyIdToken(token);
 
     const { operationName } = await req.json();
     if (!operationName) {
