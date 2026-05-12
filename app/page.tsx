@@ -1,10 +1,7 @@
-import { Suspense } from 'react';
-import VideoApp from '@/components/VideoApp';
+import dynamic from 'next/dynamic';
+
+const VideoApp = dynamic(() => import('@/components/VideoApp'), { ssr: false });
 
 export default function Home() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-950" />}>
-      <VideoApp />
-    </Suspense>
-  );
+  return <VideoApp />;
 }
