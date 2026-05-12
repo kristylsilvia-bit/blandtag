@@ -5,9 +5,9 @@ import { User } from 'firebase/auth';
 import { X, Zap } from 'lucide-react';
 
 const PACKS = [
-  { id: 'starter', name: 'Starter', credits: 100, price: '$3.00', videos: '10 videos' },
+  { id: 'starter', name: 'Starter', credits: 100, price: '$3.00', videos: '10 videos', popular: false },
   { id: 'plus', name: 'Plus', credits: 250, price: '$7.00', videos: '25 videos', popular: true },
-  { id: 'pro', name: 'Pro', credits: 500, price: '$13.00', videos: '50 videos' },
+  { id: 'pro', name: 'Pro', credits: 500, price: '$13.00', videos: '50 videos', popular: false },
 ] as const;
 
 interface Props {
