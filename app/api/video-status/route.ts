@@ -19,13 +19,15 @@ export async function POST(req: NextRequest) {
     }
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const operation = await ai.operations.getVideos({ name: operationName });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const operation = await (ai.operations as any).get({ name: operationName });
 
     if (!operation.done) {
       return NextResponse.json({ done: false });
     }
 
-    const sample = (operation.response as any)?.generatedSamples?.[0];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sample = (operation as any).response?.generatedSamples?.[0];
     const video = sample?.video;
 
     if (!video) {
