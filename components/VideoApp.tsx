@@ -82,17 +82,15 @@ export default function VideoApp() {
     if (!user) return;
     try {
       const userRef = doc(db, 'users', user.uid);
-      setDoc(
-        userRef,
-        {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-          lastLogin: serverTimestamp(),
-        },
-        { merge: true },
-      );
+      // Only write non-null fields — Firestore rules require email to be a string
+      const userProfile: Record<string, unknown> = {
+        uid: user.uid,
+        lastLogin: serverTimestamp(),
+      };
+      if (user.email) userProfile.email = user.email;
+      if (user.displayName) userProfile.displayName = user.displayName;
+      if (user.photoURL) userProfile.photoURL = user.photoURL;
+      setDoc(userRef, userProfile, { merge: true });
       const unsub = onSnapshot(userRef, (snap) => {
         setCredits(Number(snap.data()?.credits ?? 0));
       });

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,10 +23,16 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const operation = await (ai.operations as any).getVideosOperation({
-      operation: { name: operationName },
-    });
+    // Poll via REST to get the completed operation
+    const pollUrl = `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${apiKey}`;
+    const pollRes = await fetch(pollUrl);
+
+    if (!pollRes.ok) {
+      const errText = await pollRes.text();
+      return new NextResponse(`Failed to get operation: ${errText}`, { status: 502 });
+    }
+
+    const operation = await pollRes.json();
 
     if (!operation.done) {
       return new NextResponse('Video not ready', { status: 425 });
@@ -38,7 +43,7 @@ export async function GET(req: NextRequest) {
       return new NextResponse('No video in response', { status: 404 });
     }
 
-    // Case 1: inline base64 bytes (some SDK versions return this for the Gemini API)
+    // Case 1: inline base64 bytes
     if (video.videoBytes) {
       const base64 =
         typeof video.videoBytes === 'string'
@@ -55,21 +60,18 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Case 2: URI — fetch from Google with the API key (server-side only)
+    // Case 2: URI — fetch from Google with the API key server-side
     if (video.uri) {
       const sep = video.uri.includes('?') ? '&' : '?';
       const downloadUrl = `${video.uri}${sep}key=${apiKey}`;
       const upstream = await fetch(downloadUrl);
       if (!upstream.ok || !upstream.body) {
-        return new NextResponse(`Upstream fetch failed (${upstream.status})`, {
-          status: 502,
-        });
+        return new NextResponse(`Upstream fetch failed (${upstream.status})`, { status: 502 });
       }
       return new NextResponse(upstream.body, {
         status: 200,
         headers: {
-          'content-type':
-            upstream.headers.get('content-type') || video.mimeType || 'video/mp4',
+          'content-type': upstream.headers.get('content-type') || video.mimeType || 'video/mp4',
           'content-length': upstream.headers.get('content-length') || '',
           'cache-control': 'private, max-age=3600',
         },

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
 import { getAdminAuth } from '@/lib/firebaseAdmin';
 
 export const dynamic = 'force-dynamic';
@@ -29,13 +28,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'operationName required' }, { status: 400 });
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const operation = await (ai.operations as any).getVideosOperation({
-      operation: { name: operationName },
-    });
+    // Poll via REST — SDK getVideosOperation is not available in all versions
+    const pollUrl = `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${process.env.GEMINI_API_KEY}`;
+    const pollRes = await fetch(pollUrl);
+
+    if (!pollRes.ok) {
+      const errText = await pollRes.text();
+      throw new Error(`Poll failed (${pollRes.status}): ${errText}`);
+    }
+
+    const operation = await pollRes.json();
 
     if (!operation.done) {
       return NextResponse.json({ done: false });
+    }
+
+    if (operation.error) {
+      return NextResponse.json({
+        done: true,
+        error: operation.error.message || 'Video generation failed',
+      });
     }
 
     const video = extractVideo(operation);
@@ -46,8 +58,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Client always uses the proxy endpoint — it handles both uri and videoBytes
-    // and keeps the API key server-side.
     return NextResponse.json({
       done: true,
       videoUrl: `/api/video-download?op=${encodeURIComponent(operationName)}`,
