@@ -20,9 +20,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
-    // Cap at 8s max — Veo 2 is ~4x cheaper than Veo 3.1; use VEO_MODEL env var to override
     const duration = Math.min(Math.max(Number(durationSeconds), 5), 8);
-    const model = process.env.VEO_MODEL || 'veo-2.0-generate-001';
+    const model = process.env.VEO_MODEL || 'veo-3.1-fast-generate-preview';
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
     const operation = await ai.models.generateVideos({
