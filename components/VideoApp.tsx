@@ -25,7 +25,7 @@ export default function VideoApp() {
   const [showBuy, setShowBuy] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('16:9');
-  const [duration, setDuration] = useState(8);
+  const [duration, setDuration] = useState(5);
   const [genState, setGenState] = useState<GenState>('idle');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +82,6 @@ export default function VideoApp() {
     if (!user) return;
     try {
       const userRef = doc(db, 'users', user.uid);
-      // Only write non-null fields — Firestore rules require email to be a string
       const userProfile: Record<string, unknown> = {
         uid: user.uid,
         lastLogin: serverTimestamp(),
@@ -259,7 +258,7 @@ export default function VideoApp() {
       <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-10 flex flex-col gap-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-1">Generate a Video</h1>
-          <p className="text-gray-400 text-sm">Powered by Veo 3.1 &middot; 10 credits per video</p>
+          <p className="text-gray-400 text-sm">Powered by Veo 2 &middot; 10 credits per video</p>
         </div>
 
         <textarea
@@ -297,13 +296,13 @@ export default function VideoApp() {
               Duration: {duration}s
             </label>
             <input
-              type="range" min={5} max={10} step={1} value={duration}
+              type="range" min={5} max={8} step={1} value={duration}
               disabled={isGenerating}
               onChange={(e) => setDuration(Number(e.target.value))}
               className="accent-violet-500 disabled:opacity-50"
             />
             <div className="flex justify-between text-xs text-gray-600">
-              <span>5s</span><span>10s</span>
+              <span>5s</span><span>8s</span>
             </div>
           </div>
         </div>
