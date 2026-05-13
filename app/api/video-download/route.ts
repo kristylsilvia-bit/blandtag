@@ -4,11 +4,21 @@ export const dynamic = 'force-dynamic';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-function extractVideo(operation: any) {
+function extractVideo(operation: any): { uri?: string; videoBytes?: string; mimeType?: string } | null {
   const response = operation?.response;
-  const generated =
-    response?.generatedVideos?.[0] || response?.generatedSamples?.[0];
-  return generated?.video || generated;
+  if (!response) return null;
+
+  const gv = response?.generatedVideos?.[0];
+  if (gv?.video?.uri || gv?.video?.videoBytes) return gv.video;
+  if (gv?.uri || gv?.videoBytes) return gv;
+
+  const gs = response?.generatedSamples?.[0];
+  if (gs?.video?.uri || gs?.video?.videoBytes) return gs.video;
+  if (gs?.uri || gs?.videoBytes) return gs;
+
+  if (response?.video?.uri || response?.video?.videoBytes) return response.video;
+
+  return null;
 }
 
 export async function GET(req: NextRequest) {
@@ -23,7 +33,6 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Poll via REST to get the completed operation
     const pollUrl = `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${apiKey}`;
     const pollRes = await fetch(pollUrl);
 
@@ -48,7 +57,7 @@ export async function GET(req: NextRequest) {
       const base64 =
         typeof video.videoBytes === 'string'
           ? video.videoBytes
-          : Buffer.from(video.videoBytes as Uint8Array).toString('base64');
+          : Buffer.from(video.videoBytes as unknown as Uint8Array).toString('base64');
       const buffer = Buffer.from(base64, 'base64');
       return new NextResponse(buffer as any, {
         status: 200,
@@ -60,10 +69,13 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Case 2: URI — fetch from Google with the API key server-side
+    // Case 2: URI — resolve relative paths and fetch with API key server-side
     if (video.uri) {
-      const sep = video.uri.includes('?') ? '&' : '?';
-      const downloadUrl = `${video.uri}${sep}key=${apiKey}`;
+      const fullUri = video.uri.startsWith('http')
+        ? video.uri
+        : `https://generativelanguage.googleapis.com/v1beta/${video.uri}`;
+      const sep = fullUri.includes('?') ? '&' : '?';
+      const downloadUrl = `${fullUri}${sep}key=${apiKey}`;
       const upstream = await fetch(downloadUrl);
       if (!upstream.ok || !upstream.body) {
         return new NextResponse(`Upstream fetch failed (${upstream.status})`, { status: 502 });
