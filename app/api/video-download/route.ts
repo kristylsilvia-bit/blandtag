@@ -8,13 +8,24 @@ function extractVideo(operation: any): { uri?: string; videoBytes?: string; mime
   const response = operation?.response;
   if (!response) return null;
 
+  // Actual Veo 3 shape: response.generateVideoResponse.generatedSamples[0].video
+  const gvr = response?.generateVideoResponse;
+  if (gvr) {
+    const gs = gvr?.generatedSamples?.[0];
+    if (gs?.video?.uri || gs?.video?.videoBytes) return gs.video;
+    if (gs?.uri || gs?.videoBytes) return gs;
+    const gv2 = gvr?.generatedVideos?.[0];
+    if (gv2?.video?.uri || gv2?.video?.videoBytes) return gv2.video;
+    if (gv2?.uri || gv2?.videoBytes) return gv2;
+  }
+
   const gv = response?.generatedVideos?.[0];
   if (gv?.video?.uri || gv?.video?.videoBytes) return gv.video;
   if (gv?.uri || gv?.videoBytes) return gv;
 
-  const gs = response?.generatedSamples?.[0];
-  if (gs?.video?.uri || gs?.video?.videoBytes) return gs.video;
-  if (gs?.uri || gs?.videoBytes) return gs;
+  const gs2 = response?.generatedSamples?.[0];
+  if (gs2?.video?.uri || gs2?.video?.videoBytes) return gs2.video;
+  if (gs2?.uri || gs2?.videoBytes) return gs2;
 
   if (response?.video?.uri || response?.video?.videoBytes) return response.video;
 

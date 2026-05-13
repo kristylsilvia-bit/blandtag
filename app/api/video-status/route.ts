@@ -5,27 +5,30 @@ export const dynamic = 'force-dynamic';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-/**
- * Try every known Veo LRO response shape to locate the video object.
- * Includes a diagnostic snippet in the error if nothing matches.
- */
 function extractVideo(operation: any): { uri?: string; videoBytes?: string; mimeType?: string } | null {
   const response = operation?.response;
   if (!response) return null;
 
-  // Shape 1 – generatedVideos[0].video (standard Veo 3 format)
+  // Actual Veo 3 shape: response.generateVideoResponse.generatedSamples[0].video
+  const gvr = response?.generateVideoResponse;
+  if (gvr) {
+    const gs = gvr?.generatedSamples?.[0];
+    if (gs?.video?.uri || gs?.video?.videoBytes) return gs.video;
+    if (gs?.uri || gs?.videoBytes) return gs;
+    const gv2 = gvr?.generatedVideos?.[0];
+    if (gv2?.video?.uri || gv2?.video?.videoBytes) return gv2.video;
+    if (gv2?.uri || gv2?.videoBytes) return gv2;
+  }
+
+  // Fallback: generatedVideos / generatedSamples directly on response
   const gv = response?.generatedVideos?.[0];
   if (gv?.video?.uri || gv?.video?.videoBytes) return gv.video;
-  // Shape 2 – generatedVideos[0] flattened (video props directly on item)
   if (gv?.uri || gv?.videoBytes) return gv;
 
-  // Shape 3 – generatedSamples[0].video
-  const gs = response?.generatedSamples?.[0];
-  if (gs?.video?.uri || gs?.video?.videoBytes) return gs.video;
-  // Shape 4 – generatedSamples[0] flattened
-  if (gs?.uri || gs?.videoBytes) return gs;
+  const gs2 = response?.generatedSamples?.[0];
+  if (gs2?.video?.uri || gs2?.video?.videoBytes) return gs2.video;
+  if (gs2?.uri || gs2?.videoBytes) return gs2;
 
-  // Shape 5 – top-level video field on response
   if (response?.video?.uri || response?.video?.videoBytes) return response.video;
 
   return null;
@@ -70,7 +73,6 @@ export async function POST(req: NextRequest) {
 
     const video = extractVideo(operation);
     if (!video || (!video.uri && !video.videoBytes)) {
-      // Include a diagnostic snippet so we can see the actual LRO response shape
       const snippet = JSON.stringify(operation?.response ?? operation).slice(0, 400);
       return NextResponse.json({
         done: true,
